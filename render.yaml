@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: skillswap
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: SKILLSWAP_STATIC
+        value: /app/static

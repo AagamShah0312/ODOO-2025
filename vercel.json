@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "mkdir -p public && cp -R src/main/resources/static/. public/ && node -e \"require('fs').writeFileSync('public/js/config.js','window.SKILLSWAP_API='+JSON.stringify(process.env.SKILLSWAP_API||'')+';\\n')\"",
+  "outputDirectory": "public"
+}

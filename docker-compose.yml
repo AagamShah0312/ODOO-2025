@@ -1,0 +1,16 @@
+services:
+  skillswap:
+    build: .
+    image: skillswap:local
+    container_name: skillswap
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      SKILLSWAP_STATIC: /app/static
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5

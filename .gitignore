@@ -1,0 +1,8 @@
+out/
+data/
+*.class
+.idea/
+*.iml
+.DS_Store
+target/
+node_modules/

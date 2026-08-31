@@ -1,0 +1,8 @@
+.git
+.idea
+out
+data
+*.class
+*.md
+node_modules
+target

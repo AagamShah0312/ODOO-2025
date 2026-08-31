@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -25,6 +26,7 @@ import java.util.Locale;
 import java.util.Map;
 
 public class SkillSwapApp {
+    private static final int MAX_BODY = 64 * 1024;
     private static final DateTimeFormatter TIME =
             DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm").withZone(ZoneId.systemDefault());
     private final SkillSwapPlatform platform = new SkillSwapPlatform();
@@ -77,15 +79,30 @@ public class SkillSwapApp {
                 exchange.close();
                 return;
             }
-            String path = exchange.getRequestURI().getPath();
+            String path = exchange.getRequestURI() == null ? "/" : exchange.getRequestURI().getPath();
+            if (path == null || path.isBlank()) {
+                path = "/";
+            }
             if (path.startsWith("/api/")) {
                 handleApi(exchange, path);
             } else {
                 serveStatic(exchange, path);
             }
+        } catch (IllegalArgumentException e) {
+            safeError(exchange, 400, e.getMessage() == null ? "Bad request" : e.getMessage());
         } catch (Exception e) {
             e.printStackTrace();
-            writeJson(exchange, 500, Map.of("error", "Server error"));
+            safeError(exchange, 500, "Server error");
+        }
+    }
+
+    private static void safeError(HttpExchange exchange, int status, String message) {
+        try {
+            if (exchange.getResponseCode() == -1) {
+                writeJson(exchange, status, Map.of("error", message));
+            }
+        } catch (Exception ignored) {
+            exchange.close();
         }
     }
 
@@ -179,7 +196,7 @@ public class SkillSwapApp {
             writeJson(exchange, 200, list);
             return;
         }
-        if (path.startsWith("/api/users/") && method.equals("GET") && !path.contains("/remove-skill")) {
+        if (path.matches("/api/users/[^/]+") && method.equals("GET")) {
             String id = path.substring("/api/users/".length());
             User user = platform.getUser(id);
             if (user == null || user.isBanned) {
@@ -357,17 +374,7 @@ public class SkillSwapApp {
     }
 
     private Map<String, Object> userJson(User user, User viewer, boolean privateFields) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        map.put("id", user.id);
-        map.put("name", user.name);
-        map.put("location", user.location);
-        map.put("profilePhoto", user.profilePhoto);
-        map.put("availability", user.availability);
-        map.put("bio", user.bio);
-        map.put("isPublic", user.isPublic);
-        map.put("initials", user.initials());
-        map.put("skillsOffered", user.skillsOffered);
-        map.put("skillsWanted", user.skillsWanted);
+        Map<String, Object> map = new LinkedHas;
         boolean self = viewer != null && viewer.id.equals(user.id);
         if (self) {
             map.put("rating", 0);
@@ -471,8 +478,13 @@ public class SkillSwapApp {
         if (path.equals("/")) {
             path = "/index.html";
         }
+        if (path.indexOf('\0') >= 0 || path.contains("..")) {
+            writeJson(exchange, 403, Map.of("error", "Forbidden"));
+            return;
+        }
         Path root = staticRoot.toAbsolutePath().normalize();
-        Path file = root.resolve(path.substring(1)).normalize();
+        String relative = path.startsWith("/") ? path.substring(1) : path;
+        Path file = root.resolve(relative).normalize();
         if (!file.startsWith(root)) {
             writeJson(exchange, 403, Map.of("error", "Forbidden"));
             return;
@@ -490,6 +502,7 @@ public class SkillSwapApp {
         String type = contentType(file.getFileName().toString());
         Headers headers = exchange.getResponseHeaders();
         applyCors(exchange);
+        applySecurityHeaders(headers);
         headers.set("Content-Type", type);
         exchange.sendResponseHeaders(200, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
@@ -523,15 +536,52 @@ public class SkillSwapApp {
     private static void applyCors(HttpExchange exchange) {
         Headers headers = exchange.getResponseHeaders();
         String origin = exchange.getRequestHeaders().getFirst("Origin");
-        if (origin != null && !origin.isBlank()) {
-            headers.set("Access-Control-Allow-Origin", origin);
-            headers.set("Vary", "Origin");
-        } else {
-            headers.set("Access-Control-Allow-Origin", "*");
+        if (originAllowed(exchange, origin)) {
+            if (origin != null && !origin.isBlank()) {
+                headers.set("Access-Control-Allow-Origin", origin);
+                headers.set("Vary", "Origin");
+                headers.set("Access-Control-Allow-Credentials", "true");
+            }
+            headers.set("Access-Control-Allow-Headers", "Content-Type");
+            headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
         }
-        headers.set("Access-Control-Allow-Credentials", "true");
-        headers.set("Access-Control-Allow-Headers", "Content-Type");
-        headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    }
+
+    private static boolean originAllowed(HttpExchange exchange, String origin) {
+        if (origin == null || origin.isBlank()) {
+            return true;
+        }
+        if (origin.length() > 200 || origin.contains("\r") || origin.contains("\n")) {
+            return false;
+        }
+        String host = exchange.getRequestHeaders().getFirst("Host");
+        try {
+            URI uri = URI.create(origin);
+            String originHost = uri.getHost();
+            if (originHost != null && host != null) {
+                String authority = uri.getPort() > 0 ? originHost + ":" + uri.getPort() : originHost;
+                if (host.equalsIgnoreCase(originHost) || host.equalsIgnoreCase(authority)) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+            return false;
+        }
+        String extra = System.getenv("SKILLSWAP_CORS");
+        if (extra != null) {
+            for (String allowed : extra.split(",")) {
+                if (origin.equals(allowed.trim())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static void applySecurityHeaders(Headers headers) {
+        headers.set("X-Content-Type-Options", "nosniff");
+        headers.set("Referrer-Policy", "same-origin");
+        headers.set("Cache-Control", "no-store");
     }
 
     private static String cookieFlags(HttpExchange exchange) {
@@ -541,10 +591,13 @@ public class SkillSwapApp {
         String sameSite = System.getenv("COOKIE_SAMESITE");
         if (sameSite == null || sameSite.isBlank()) {
             sameSite = "Lax";
-        }
-        if ("None".equalsIgnoreCase(sameSite)) {
-            secure = true;
+        } else if (sameSite.equalsIgnoreCase("None")) {
             sameSite = "None";
+            secure = true;
+        } else if (sameSite.equalsIgnoreCase("Strict")) {
+            sameSite = "Strict";
+        } else {
+            sameSite = "Lax";
         }
         String flags = "Path=/; HttpOnly; SameSite=" + sameSite + "; Max-Age=604800";
         if (secure) {
@@ -576,9 +629,12 @@ public class SkillSwapApp {
 
     private static Map<String, String> query(HttpExchange exchange) {
         Map<String, String> map = new LinkedHashMap<>();
-        String raw = exchange.getRequestURI().getRawQuery();
+        String raw = exchange.getRequestURI() == null ? null : exchange.getRequestURI().getRawQuery();
         if (raw == null || raw.isBlank()) {
             return map;
+        }
+        if (raw.length() > 2048) {
+            throw new IllegalArgumentException("Query too long");
         }
         for (String part : raw.split("&")) {
             String[] kv = part.split("=", 2);
@@ -590,16 +646,28 @@ public class SkillSwapApp {
     }
 
     private static String urlDecode(String value) {
-        return URLDecoder.decode(value, StandardCharsets.UTF_8);
+        try {
+            return URLDecoder.decode(value, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid query string");
+        }
     }
 
     private static Map<String, Object> readJson(HttpExchange exchange) throws IOException {
         try (InputStream in = exchange.getRequestBody()) {
-            String text = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            byte[] raw = in.readNBytes(MAX_BODY + 1);
+            if (raw.length > MAX_BODY) {
+                throw new IllegalArgumentException("Request too large");
+            }
+            String text = new String(raw, StandardCharsets.UTF_8);
             if (text.isBlank()) {
                 return new LinkedHashMap<>();
             }
-            return Json.object(text);
+            try {
+                return Json.object(text);
+            } catch (RuntimeException e) {
+                throw new IllegalArgumentException("Invalid JSON");
+            }
         }
     }
 
@@ -607,6 +675,7 @@ public class SkillSwapApp {
         byte[] bytes = Json.stringify(body).getBytes(StandardCharsets.UTF_8);
         applyCors(exchange);
         Headers headers = exchange.getResponseHeaders();
+        applySecurityHeaders(headers);
         headers.set("Content-Type", "application/json; charset=utf-8");
         exchange.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
@@ -616,6 +685,17 @@ public class SkillSwapApp {
 
     private static void writeCsv(HttpExchange exchange, String filename, String csv) throws IOException {
         byte[] bytes = csv.getBytes(StandardCharsets.UTF_8);
+        applyCors(exchange);
+        Headers headers = exchange.getResponseHeaders();
+        headers.set("Content-Type", "text/csv; charset=utf-8");
+        headers.set("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+        exchange.sendResponseHeaders(200, bytes.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(bytes);
+        }
+    }
+}
+e[] bytes = csv.getBytes(StandardCharsets.UTF_8);
         applyCors(exchange);
         Headers headers = exchange.getResponseHeaders();
         headers.set("Content-Type", "text/csv; charset=utf-8");

@@ -138,11 +138,14 @@ public final class Json {
     }
 
     private static final class Parser {
+        private static final int MAX_DEPTH = 8;
+        private static final int MAX_STRING = 8000;
         private final String text;
         private int i;
+        private int depth;
 
         Parser(String text) {
-            this.text = text;
+            this.text = text.length() > 80_000 ? text.substring(0, 80_000) : text;
         }
 
         Object parseValue() {
@@ -171,11 +174,13 @@ public final class Json {
         }
 
         private Map<String, Object> parseObject() {
+            enter();
             Map<String, Object> map = new LinkedHashMap<>();
             expect('{');
             skip();
             if (peek('}')) {
                 i++;
+                leave();
                 return map;
             }
             while (true) {
@@ -191,15 +196,18 @@ public final class Json {
                 }
                 expect(',');
             }
+            leave();
             return map;
         }
 
         private List<Object> parseArray() {
+            enter();
             List<Object> list = new ArrayList<>();
             expect('[');
             skip();
             if (peek(']')) {
                 i++;
+                leave();
                 return list;
             }
             while (true) {
@@ -211,7 +219,19 @@ public final class Json {
                 }
                 expect(',');
             }
+            leave();
             return list;
+        }
+
+        private void enter() {
+            depth++;
+            if (depth > MAX_DEPTH) {
+                throw new IllegalArgumentException("JSON too deep");
+            }
+        }
+
+        private void leave() {
+            depth--;
         }
 
         private String parseString() {
@@ -221,6 +241,9 @@ public final class Json {
                 char c = text.charAt(i++);
                 if (c == '"') {
                     return out.toString();
+                }
+                if (out.length() >= MAX_STRING) {
+                    throw new IllegalArgumentException("String too long");
                 }
                 if (c == '\\' && i < text.length()) {
                     char n = text.charAt(i++);
@@ -262,13 +285,16 @@ public final class Json {
                 i++;
             }
             String raw = text.substring(start, i);
-            if (raw.contains(".")) {
-                return Double.parseDouble(raw);
+            if (raw.isEmpty() || "-".equals(raw) || ".".equals(raw) || "-.".equals(raw)) {
+                throw new IllegalArgumentException("Invalid number");
             }
             try {
+                if (raw.contains(".")) {
+                    return Double.parseDouble(raw);
+                }
                 return Long.parseLong(raw);
             } catch (NumberFormatException e) {
-                return Double.parseDouble(raw);
+                throw new IllegalArgumentException("Invalid number");
             }
         }
 

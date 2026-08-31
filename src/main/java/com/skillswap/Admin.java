@@ -49,6 +49,9 @@ public class Admin {
     public PlatformMessage sendPlatformMessage(String message) {
         PlatformMessage msg = new PlatformMessage(message);
         platformMessages.add(0, msg);
+        if (platformMessages.size() > 50) {
+            platformMessages.subList(50, platformMessages.size()).clear();
+        }
         System.out.println("Broadcast message: " + message);
         return msg;
     }

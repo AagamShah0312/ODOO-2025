@@ -30,27 +30,20 @@ public class SkillSwapPlatform {
     public synchronized User register(String name, String email, String password, String location,
                                       String photo, String availability, String bio,
                                       List<String> offered, List<String> wanted, boolean isPublic) {
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("Name is required.");
-        }
-        if (email == null || email.isBlank()) {
-            throw new IllegalArgumentException("Email is required.");
-        }
-        email = email.trim().toLowerCase(Locale.ROOT);
+        name = requireLength("Name", name, 1, 80);
+        email = normalizeEmail(email);
         if (usersByEmail.containsKey(email)) {
             throw new IllegalArgumentException("An account with that email already exists.");
         }
-        if (password == null || password.length() < 4) {
-            throw new IllegalArgumentException("Password must be at least 4 characters.");
-        }
-        User user = new User(name.trim());
+        requirePassword(password);
+        User user = new User(name);
         user.email = email;
         user.salt = randomSalt();
         user.passwordHash = hash(password, user.salt);
-        user.location = safe(location);
-        user.profilePhoto = safe(photo);
-        user.availability = safe(availability);
-        user.bio = safe(bio);
+        user.location = clip(location, 80);
+        user.profilePhoto = sanitizeUrl(photo);
+        user.availability = clip(availability, 80);
+        user.bio = clip(bio, 2000);
         user.isPublic = isPublic;
         addSkills(user.skillsOffered, offered);
         addSkills(user.skillsWanted, wanted);
@@ -60,11 +53,16 @@ public class SkillSwapPlatform {
     }
 
     public synchronized User login(String email, String password) {
-        if (email == null) {
+        if (email == null || password == null) {
             throw new IllegalArgumentException("Invalid email or password.");
         }
         User user = usersByEmail.get(email.trim().toLowerCase(Locale.ROOT));
-        if (user == null || !user.passwordHash.equals(hash(password, user.salt))) {
+        String salt = user != null ? user.salt : "0000000000000000";
+        String expected = user != null ? user.passwordHash : hash("invalid", salt);
+        boolean matches = MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8),
+                hash(password, salt).getBytes(StandardCharsets.UTF_8));
+        if (user == null || !matches) {
             throw new IllegalArgumentException("Invalid email or password.");
         }
         if (user.isBanned) {
@@ -85,8 +83,8 @@ public class SkillSwapPlatform {
         }
     }
 
-    public User userForSession(String sid) {
-        if (sid == null) {
+    public synchronized User userForSession(String sid) {
+        if (sid == null || sid.length() > 80) {
             return null;
         }
         String id = sessions.get(sid);
@@ -105,19 +103,19 @@ public class SkillSwapPlatform {
                                            String availability, String bio, List<String> offered,
                                            List<String> wanted, Boolean isPublic) {
         if (name != null && !name.isBlank()) {
-            user.name = name.trim();
+            user.name = requireLength("Name", name, 1, 80);
         }
         if (location != null) {
-            user.location = location.trim();
+            user.location = clip(location, 80);
         }
         if (photo != null) {
-            user.profilePhoto = photo.trim();
+            user.profilePhoto = sanitizeUrl(photo);
         }
         if (availability != null) {
-            user.availability = availability.trim();
+            user.availability = clip(availability, 80);
         }
         if (bio != null) {
-            user.bio = bio.trim();
+            user.bio = clip(bio, 2000);
         }
         if (offered != null) {
             user.skillsOffered.clear();
@@ -133,13 +131,16 @@ public class SkillSwapPlatform {
         return user;
     }
 
-    public User getUser(String id) {
+    public synchronized User getUser(String id) {
+        if (id == null || id.length() > 80) {
+            return null;
+        }
         return usersById.get(id);
     }
 
     public synchronized List<User> publicUsers(User viewer, String query, String skill) {
-        String q = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
-        String sk = skill == null ? "" : skill.trim().toLowerCase(Locale.ROOT);
+        String q = clip(query, 80).toLowerCase(Locale.ROOT);
+        String sk = clip(skill, 80).toLowerCase(Locale.ROOT);
         List<User> result = new ArrayList<>();
         for (User user : usersById.values()) {
             if (user.isBanned) {
@@ -167,11 +168,11 @@ public class SkillSwapPlatform {
             }
             result.add(user);
         }
-        result.sort(Comparator.comparing(u -> u.name.toLowerCase(Locale.ROOT)));
+        result.sort(Comparator.comparing(u -> (u.name == null ? "" : u.name.toLowerCase(Locale.ROOT))));
         return result;
     }
 
-    public List<User> allUsers() {
+    public synchronized List<User> allUsers() {
         return new ArrayList<>(usersById.values());
     }
 
@@ -193,6 +194,12 @@ public class SkillSwapPlatform {
 
     public synchronized SwapRequest sendSwapRequest(User from, User to, String skillOffered,
                                                     String skillWanted, String message) {
+        if (from == null || to == null) {
+            throw new IllegalArgumentException("User not found.");
+        }
+        if (from.isBanned) {
+            throw new IllegalArgumentException("This account has been banned.");
+        }
         if (from.id.equals(to.id)) {
             throw new IllegalArgumentException("You cannot swap with yourself.");
         }
@@ -202,17 +209,23 @@ public class SkillSwapPlatform {
         if (!to.isPublic) {
             throw new IllegalArgumentException("That profile is private.");
         }
+        skillOffered = clip(skillOffered, 40);
+        skillWanted = clip(skillWanted, 40);
+        message = clip(message, 500);
+        if (skillOffered.isEmpty() || skillWanted.isEmpty()) {
+            throw new IllegalArgumentException("Pick a skill to offer and a skill to learn.");
+        }
         boolean duplicate = swaps.values().stream().anyMatch(s ->
                 s.isPending() && s.fromId.equals(from.id) && s.toId.equals(to.id)
-                        && safe(skillOffered).equalsIgnoreCase(s.skillOffered)
-                        && safe(skillWanted).equalsIgnoreCase(s.skillWanted));
+                        && skillOffered.equalsIgnoreCase(s.skillOffered)
+                        && skillWanted.equalsIgnoreCase(s.skillWanted));
         if (duplicate) {
             throw new IllegalArgumentException("You already have a pending request like this.");
         }
         SwapRequest request = new SwapRequest(from, to);
-        request.skillOffered = safe(skillOffered);
-        request.skillWanted = safe(skillWanted);
-        request.message = safe(message);
+        request.skillOffered = skillOffered;
+        request.skillWanted = skillWanted;
+        request.message = message;
         to.swapRequests.add(request);
         from.swapRequests.add(request);
         swaps.put(request.id, request);
@@ -281,7 +294,7 @@ public class SkillSwapPlatform {
         if (rating < 1 || rating > 5) {
             throw new IllegalArgumentException("Rating must be between 1 and 5.");
         }
-        String note = safe(comment);
+        String note = clip(comment, 400);
         if (request.fromId.equals(user.id)) {
             if (request.fromRating != null) {
                 throw new IllegalArgumentException("You already left feedback.");
@@ -309,14 +322,14 @@ public class SkillSwapPlatform {
         return request;
     }
 
-    public List<SwapRequest> swapsFor(User user) {
+    public synchronized List<SwapRequest> swapsFor(User user) {
         return swaps.values().stream()
                 .filter(s -> s.fromId.equals(user.id) || s.toId.equals(user.id))
                 .sorted(Comparator.comparing((SwapRequest s) -> s.createdAt).reversed())
                 .collect(Collectors.toList());
     }
 
-    public List<SwapRequest> allSwaps() {
+    public synchronized List<SwapRequest> allSwaps() {
         return swaps.values().stream()
                 .sorted(Comparator.comparing((SwapRequest s) -> s.createdAt).reversed())
                 .collect(Collectors.toList());
@@ -349,17 +362,18 @@ public class SkillSwapPlatform {
 
     public synchronized PlatformMessage broadcast(User actor, String message) {
         requireAdmin(actor);
-        if (message == null || message.isBlank()) {
+        String text = clip(message, 280);
+        if (text.isEmpty()) {
             throw new IllegalArgumentException("Message cannot be empty.");
         }
-        return admin.sendPlatformMessage(message.trim());
+        return admin.sendPlatformMessage(text);
     }
 
-    public List<PlatformMessage> messages() {
+    public synchronized List<PlatformMessage> messages() {
         return new ArrayList<>(admin.platformMessages);
     }
 
-    public double averageRating(User user) {
+    public synchronized double averageRating(User user) {
         List<Integer> ratings = new ArrayList<>();
         for (SwapRequest swap : swaps.values()) {
             if (swap.toId.equals(user.id) && swap.fromRating != null) {
@@ -375,7 +389,7 @@ public class SkillSwapPlatform {
         return ratings.stream().mapToInt(Integer::intValue).average().orElse(0);
     }
 
-    public int ratingCount(User user) {
+    public synchronized int ratingCount(User user) {
         int n = 0;
         for (SwapRequest swap : swaps.values()) {
             if (swap.toId.equals(user.id) && swap.fromRating != null) {
@@ -388,12 +402,12 @@ public class SkillSwapPlatform {
         return n;
     }
 
-    public Map<String, Object> stats() {
+    public synchronized Map<String, Object> stats() {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("users", usersById.size());
         map.put("swaps", swaps.size());
         map.put("pending", swaps.values().stream().filter(SwapRequest::isPending).count());
-        map.put("accepted", swaps.values().stream().filter(s -> "accepted".equals(s.status) || "completed".equals(s.status)).count());
+        map.put("accepted", swaps.values().stream().filter(SwapRequest::isAccepted).count());
         map.put("skills", usersById.values().stream().flatMap(u -> u.skillsOffered.stream()).distinct().count());
         return map;
     }

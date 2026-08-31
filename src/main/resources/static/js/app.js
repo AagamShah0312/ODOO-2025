@@ -27,7 +27,10 @@ async function api(path, options = {}) {
     ...options,
   });
   const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
+  let data = {};
+  if (text) {
+    try { data = JSON.parse(text); } catch { data = { error: "Unexpected response" }; }
+  }
   if (!res.ok) throw new Error(data.error || "Request failed");
   return data;
 }

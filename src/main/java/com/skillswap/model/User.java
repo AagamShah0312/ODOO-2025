@@ -37,7 +37,13 @@ public class User {
     }
 
     public void addFeedback(String feedback) {
+        if (feedback == null || feedback.isBlank()) {
+            return;
+        }
         feedbackList.add(feedback);
+        if (feedbackList.size() > 50) {
+            feedbackList.remove(0);
+        }
     }
 
     public List<SwapRequest> swapRequests() {

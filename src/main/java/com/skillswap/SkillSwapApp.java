@@ -374,7 +374,7 @@ public class SkillSwapApp {
     }
 
     private Map<String, Object> userJson(User user, User viewer, boolean privateFields) {
-        Map<String, Object> map = new LinkedHas;
+        Map<String, Object> map = new LinkedHashMap<>();
         boolean self = viewer != null && viewer.id.equals(user.id);
         if (self) {
             map.put("rating", 0);
@@ -685,17 +685,6 @@ public class SkillSwapApp {
 
     private static void writeCsv(HttpExchange exchange, String filename, String csv) throws IOException {
         byte[] bytes = csv.getBytes(StandardCharsets.UTF_8);
-        applyCors(exchange);
-        Headers headers = exchange.getResponseHeaders();
-        headers.set("Content-Type", "text/csv; charset=utf-8");
-        headers.set("Content-Disposition", "attachment; filename=\"" + filename + "\"");
-        exchange.sendResponseHeaders(200, bytes.length);
-        try (OutputStream os = exchange.getResponseBody()) {
-            os.write(bytes);
-        }
-    }
-}
-e[] bytes = csv.getBytes(StandardCharsets.UTF_8);
         applyCors(exchange);
         Headers headers = exchange.getResponseHeaders();
         headers.set("Content-Type", "text/csv; charset=utf-8");

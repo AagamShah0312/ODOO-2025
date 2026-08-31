@@ -215,10 +215,12 @@ public class SkillSwapPlatform {
         if (skillOffered.isEmpty() || skillWanted.isEmpty()) {
             throw new IllegalArgumentException("Pick a skill to offer and a skill to learn.");
         }
+        final String finalSkillOffered = skillOffered;
+        final String finalSkillWanted = skillWanted;
         boolean duplicate = swaps.values().stream().anyMatch(s ->
                 s.isPending() && s.fromId.equals(from.id) && s.toId.equals(to.id)
-                        && skillOffered.equalsIgnoreCase(s.skillOffered)
-                        && skillWanted.equalsIgnoreCase(s.skillWanted));
+                        && finalSkillOffered.equalsIgnoreCase(s.skillOffered)
+                        && finalSkillWanted.equalsIgnoreCase(s.skillWanted));
         if (duplicate) {
             throw new IllegalArgumentException("You already have a pending request like this.");
         }
@@ -510,4 +512,42 @@ public class SkillSwapPlatform {
     private static String safe(String value) {
         return value == null ? "" : value.trim();
     }
+
+    private static String clip(String value, int max) {
+        String s = safe(value);
+        return s.length() > max ? s.substring(0, max) : s;
+    }
+
+    private static String requireLength(String field, String value, int min, int max) {
+        String s = safe(value);
+        if (s.length() < min || s.length() > max) {
+            throw new IllegalArgumentException(field + " must be " + min + "-" + max + " chars");
+        }
+        return s;
+    }
+
+    private static void requirePassword(String password) {
+        String s = safe(password);
+        if (s.length() < 6) {
+            throw new IllegalArgumentException("Password too short");
+        }
+    }
+
+    private static String normalizeEmail(String email) {
+        return safe(email).toLowerCase(Locale.ROOT).trim();
+    }
+
+    private static String sanitizeUrl(String url) {
+        String s = safe(url);
+        if (s.isEmpty()) return s;
+        if (!s.startsWith("http://") && !s.startsWith("https://")) {
+            s = "https://" + s;
+        }
+        return s.length() > 500 ? s.substring(0, 500) : s;
+    }
 }
+
+
+
+
+

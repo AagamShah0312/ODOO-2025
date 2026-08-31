@@ -2,7 +2,7 @@ FROM eclipse-temurin:21-jdk-alpine AS build
 WORKDIR /app
 COPY src ./src
 RUN mkdir -p out \
-    && find src -name "*.java" > /tmp/sources.txt \
+    && find src/main/java -name "*.java" > /tmp/sources.txt \
     && javac -encoding UTF-8 -d out @/tmp/sources.txt
 
 FROM eclipse-temurin:21-jre-alpine

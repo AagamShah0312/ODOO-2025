@@ -19,18 +19,24 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class SkillSwapApp {
     private static final int MAX_BODY = 64 * 1024;
+    private static final int MAX_PATH = 500;
+    private static final long AUTH_WINDOW_MS = 10 * 60 * 1000L;
+    private static final int AUTH_MAX_ATTEMPTS = 15;
     private static final DateTimeFormatter TIME =
             DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm").withZone(ZoneId.systemDefault());
     private final SkillSwapPlatform platform = new SkillSwapPlatform();
     private final Path staticRoot;
+    private final Map<String, ArrayDeque<Long>> authAttempts = new ConcurrentHashMap<>();
 
     public SkillSwapApp(Path staticRoot) {
         this.staticRoot = staticRoot;
@@ -83,6 +89,10 @@ public class SkillSwapApp {
             if (path == null || path.isBlank()) {
                 path = "/";
             }
+            if (path.length() > MAX_PATH) {
+                safeError(exchange, 414, "Path too long");
+                return;
+            }
             if (path.startsWith("/api/")) {
                 handleApi(exchange, path);
             } else {
@@ -108,6 +118,10 @@ public class SkillSwapApp {
 
     private void handleApi(HttpExchange exchange, String path) throws IOException {
         String method = exchange.getRequestMethod().toUpperCase(Locale.ROOT);
+        if ((method.equals("POST") || method.equals("PUT")) && !hasJsonContentType(exchange)) {
+            writeJson(exchange, 415, Map.of("error", "Content-Type must be application/json"));
+            return;
+        }
         User me = platform.userForSession(cookie(exchange, "SKILLSWAP_SID"));
         Map<String, String> query = query(exchange);
 
@@ -124,6 +138,10 @@ public class SkillSwapApp {
             return;
         }
         if (path.equals("/api/register") && method.equals("POST")) {
+            if (authRateLimited(exchange)) {
+                writeJson(exchange, 429, Map.of("error", "Too many attempts. Try again in a few minutes."));
+                return;
+            }
             Map<String, Object> body = readJson(exchange);
             try {
                 User user = platform.register(
@@ -145,6 +163,10 @@ public class SkillSwapApp {
             return;
         }
         if (path.equals("/api/login") && method.equals("POST")) {
+            if (authRateLimited(exchange)) {
+                writeJson(exchange, 429, Map.of("error", "Too many attempts. Try again in a few minutes."));
+                return;
+            }
             Map<String, Object> body = readJson(exchange);
             try {
                 User user = platform.login(Json.str(body, "email"), Json.str(body, "password"));
@@ -375,16 +397,19 @@ public class SkillSwapApp {
 
     private Map<String, Object> userJson(User user, User viewer, boolean privateFields) {
         Map<String, Object> map = new LinkedHashMap<>();
-        boolean self = viewer != null && viewer.id.equals(user.id);
-        if (self) {
-            map.put("rating", 0);
-            map.put("ratingCount", 0);
-            map.put("feedback", List.of());
-        } else {
-            map.put("rating", Math.round(platform.averageRating(user) * 10.0) / 10.0);
-            map.put("ratingCount", platform.ratingCount(user));
-            map.put("feedback", user.feedbackList);
-        }
+        map.put("id", user.id);
+        map.put("name", user.name);
+        map.put("initials", user.initials());
+        map.put("location", user.location);
+        map.put("profilePhoto", user.profilePhoto);
+        map.put("availability", user.availability);
+        map.put("bio", user.bio);
+        map.put("skillsOffered", new ArrayList<>(user.skillsOffered));
+        map.put("skillsWanted", new ArrayList<>(user.skillsWanted));
+        map.put("isPublic", user.isPublic);
+        map.put("rating", Math.round(platform.averageRating(user) * 10.0) / 10.0);
+        map.put("ratingCount", platform.ratingCount(user));
+        map.put("feedback", List.copyOf(user.feedbackList));
         if (privateFields) {
             map.put("email", user.email);
             map.put("isAdmin", user.isAdmin);
@@ -503,6 +528,7 @@ public class SkillSwapApp {
         Headers headers = exchange.getResponseHeaders();
         applyCors(exchange);
         applySecurityHeaders(headers);
+        applyTransportHeaders(exchange);
         headers.set("Content-Type", type);
         exchange.sendResponseHeaders(200, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
@@ -582,6 +608,55 @@ public class SkillSwapApp {
         headers.set("X-Content-Type-Options", "nosniff");
         headers.set("Referrer-Policy", "same-origin");
         headers.set("Cache-Control", "no-store");
+        headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+        headers.set("Content-Security-Policy",
+                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                        + "img-src 'self' https: data:; connect-src 'self' https:; "
+                        + "object-src 'none'; base-uri 'self'; form-action 'self'");
+    }
+
+    private static void applyTransportHeaders(HttpExchange exchange) {
+        String proto = exchange.getRequestHeaders().getFirst("X-Forwarded-Proto");
+        if ("https".equalsIgnoreCase(proto)) {
+            exchange.getResponseHeaders().set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+        }
+    }
+
+    private static boolean hasJsonContentType(HttpExchange exchange) {
+        String type = exchange.getRequestHeaders().getFirst("Content-Type");
+        return type != null && type.toLowerCase(Locale.ROOT).contains("application/json");
+    }
+
+    private boolean authRateLimited(HttpExchange exchange) {
+        String ip = clientIp(exchange);
+        long now = System.currentTimeMillis();
+        if (authAttempts.size() > 10_000) {
+            authAttempts.clear();
+        }
+        ArrayDeque<Long> hits = authAttempts.computeIfAbsent(ip, k -> new ArrayDeque<>());
+        synchronized (hits) {
+            while (!hits.isEmpty() && now - hits.peekFirst() > AUTH_WINDOW_MS) {
+                hits.pollFirst();
+            }
+            if (hits.size() >= AUTH_MAX_ATTEMPTS) {
+                return true;
+            }
+            hits.addLast(now);
+            return false;
+        }
+    }
+
+    private static String clientIp(HttpExchange exchange) {
+        String forwarded = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            String first = forwarded.split(",")[0].trim();
+            if (!first.isEmpty() && first.length() <= 64) {
+                return first;
+            }
+        }
+        return exchange.getRemoteAddress() != null && exchange.getRemoteAddress().getAddress() != null
+                ? exchange.getRemoteAddress().getAddress().getHostAddress()
+                : "unknown";
     }
 
     private static String cookieFlags(HttpExchange exchange) {
@@ -676,6 +751,7 @@ public class SkillSwapApp {
         applyCors(exchange);
         Headers headers = exchange.getResponseHeaders();
         applySecurityHeaders(headers);
+        applyTransportHeaders(exchange);
         headers.set("Content-Type", "application/json; charset=utf-8");
         exchange.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
@@ -687,6 +763,8 @@ public class SkillSwapApp {
         byte[] bytes = csv.getBytes(StandardCharsets.UTF_8);
         applyCors(exchange);
         Headers headers = exchange.getResponseHeaders();
+        applySecurityHeaders(headers);
+        applyTransportHeaders(exchange);
         headers.set("Content-Type", "text/csv; charset=utf-8");
         headers.set("Content-Disposition", "attachment; filename=\"" + filename + "\"");
         exchange.sendResponseHeaders(200, bytes.length);

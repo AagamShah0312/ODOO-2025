@@ -15,16 +15,29 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+
 public class SkillSwapPlatform {
+    private static final long SESSION_TTL_MS = 7L * 24 * 60 * 60 * 1000;
+    private static final int PBKDF2_ITERATIONS = 120_000;
+    private static final Pattern EMAIL = Pattern.compile("^[^@\\s]{1,64}@[^@\\s]{1,190}\\.[^@\\s]{2,64}$");
+
+    private record Session(String userId, long expiresAt) {
+        boolean expired() {
+            return System.currentTimeMillis() > expiresAt;
+        }
+    }
+
     public final Admin admin = new Admin();
     private final Map<String, User> usersById = new LinkedHashMap<>();
     private final Map<String, User> usersByEmail = new LinkedHashMap<>();
     private final Map<String, SwapRequest> swaps = new LinkedHashMap<>();
-    private final Map<String, String> sessions = new ConcurrentHashMap<>();
+    private final Map<String, Session> sessions = new ConcurrentHashMap<>();
     private final SecureRandom random = new SecureRandom();
 
     public synchronized User register(String name, String email, String password, String location,
@@ -72,8 +85,11 @@ public class SkillSwapPlatform {
     }
 
     public String createSession(User user) {
-        String sid = UUID.randomUUID().toString();
-        sessions.put(sid, user.id);
+        purgeExpiredSessions();
+        byte[] token = new byte[32];
+        random.nextBytes(token);
+        String sid = HexFormat.of().formatHex(token);
+        sessions.put(sid, new Session(user.id, System.currentTimeMillis() + SESSION_TTL_MS));
         return sid;
     }
 
@@ -87,16 +103,24 @@ public class SkillSwapPlatform {
         if (sid == null || sid.length() > 80) {
             return null;
         }
-        String id = sessions.get(sid);
-        if (id == null) {
+        Session session = sessions.get(sid);
+        if (session == null) {
             return null;
         }
-        User user = usersById.get(id);
+        if (session.expired()) {
+            sessions.remove(sid);
+            return null;
+        }
+        User user = usersById.get(session.userId());
         if (user == null || user.isBanned) {
             sessions.remove(sid);
             return null;
         }
         return user;
+    }
+
+    private void purgeExpiredSessions() {
+        sessions.entrySet().removeIf(e -> e.getValue().expired());
     }
 
     public synchronized User updateProfile(User user, String name, String location, String photo,
@@ -174,22 +198,6 @@ public class SkillSwapPlatform {
 
     public synchronized List<User> allUsers() {
         return new ArrayList<>(usersById.values());
-    }
-
-    public static void sendSwapRequest(User from, User to) {
-        SwapRequest request = new SwapRequest(from, to);
-        to.swapRequests.add(request);
-        from.swapRequests.add(request);
-        System.out.println(from.name + " sent a swap request to " + to.name);
-    }
-
-    public static void acceptSwapRequest(User user, int index) {
-        if (index >= 0 && index < user.swapRequests.size()) {
-            user.swapRequests.get(index).status = "accepted";
-            user.swapRequests.get(index).resolvedAt = Instant.now();
-            System.out.println(user.name + " accepted swap request from "
-                    + user.swapRequests.get(index).from.name);
-        }
     }
 
     public synchronized SwapRequest sendSwapRequest(User from, User to, String skillOffered,
@@ -348,7 +356,7 @@ public class SkillSwapPlatform {
             throw new IllegalArgumentException("Admins cannot be banned.");
         }
         admin.banUser(target);
-        sessions.entrySet().removeIf(e -> e.getValue().equals(target.id));
+        sessions.entrySet().removeIf(e -> e.getValue().userId().equals(target.id));
     }
 
     public synchronized void unban(User actor, String userId) {
@@ -494,16 +502,20 @@ public class SkillSwapPlatform {
     }
 
     private String randomSalt() {
-        byte[] bytes = new byte[8];
+        byte[] bytes = new byte[16];
         random.nextBytes(bytes);
         return HexFormat.of().formatHex(bytes);
     }
 
     public static String hash(String password, String salt) {
         try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest((salt + ":" + password).getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
+            PBEKeySpec spec = new PBEKeySpec(
+                    password.toCharArray(),
+                    HexFormat.of().parseHex(salt),
+                    PBKDF2_ITERATIONS,
+                    256);
+            SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            return HexFormat.of().formatHex(factory.generateSecret(spec).getEncoded());
         } catch (Exception e) {
             throw new IllegalStateException("Hashing unavailable", e);
         }
@@ -529,12 +541,19 @@ public class SkillSwapPlatform {
     private static void requirePassword(String password) {
         String s = safe(password);
         if (s.length() < 6) {
-            throw new IllegalArgumentException("Password too short");
+            throw new IllegalArgumentException("Password must be at least 6 characters");
+        }
+        if (s.length() > 128) {
+            throw new IllegalArgumentException("Password too long");
         }
     }
 
     private static String normalizeEmail(String email) {
-        return safe(email).toLowerCase(Locale.ROOT).trim();
+        String s = safe(email).toLowerCase(Locale.ROOT);
+        if (!EMAIL.matcher(s).matches()) {
+            throw new IllegalArgumentException("Enter a valid email address");
+        }
+        return s;
     }
 
     private static String sanitizeUrl(String url) {

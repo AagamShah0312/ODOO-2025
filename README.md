@@ -21,7 +21,9 @@ The original Swing screens are replaced by a small **zero-dependency Java HTTP s
 - Broadcast a desk-wide note
 - Download CSV reports (users, swaps, feedback)
 
-## Run with Docker
+## Run locally
+
+**Docker**
 
 ```bash
 docker compose up --build
@@ -29,12 +31,21 @@ docker compose up --build
 
 Open [http://localhost:8080](http://localhost:8080).
 
-## Run locally (JDK 17+)
+**JDK 17+**
 
 ```bash
 chmod +x compile.sh run.sh
 ./run.sh
 ```
+
+## Deploy (Render + Vercel)
+
+This is a Java server. **Render can host it. Vercel cannot run Java.**
+
+Step-by-step: [DEPLOY.md](DEPLOY.md)
+
+- **Render:** New Web Service → Docker → this repo → health check `/api/health`
+- **Vercel (optional UI only):** deploy static files and set `SKILLSWAP_API` to your Render URL
 
 ## Demo seats
 

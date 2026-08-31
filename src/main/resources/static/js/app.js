@@ -18,8 +18,10 @@ function avatarColor(name) {
   return PALETTE[h % PALETTE.length];
 }
 
+const API = (window.SKILLSWAP_API || "").replace(/\/$/, "");
+
 async function api(path, options = {}) {
-  const res = await fetch(path, {
+  const res = await fetch(API + path, {
     credentials: "include",
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
@@ -454,9 +456,9 @@ function viewAdmin() {
         <button class="btn copper" id="cast">Send</button>
       </div>
       <div class="actions">
-        <a class="btn" href="/api/admin/reports/users.csv">Users CSV</a>
-        <a class="btn" href="/api/admin/reports/swaps.csv">Swaps CSV</a>
-        <a class="btn" href="/api/admin/reports/feedback.csv">Feedback CSV</a>
+        <a class="btn" href="${API}/api/admin/reports/users.csv">Users CSV</a>
+        <a class="btn" href="${API}/api/admin/reports/swaps.csv">Swaps CSV</a>
+        <a class="btn" href="${API}/api/admin/reports/feedback.csv">Feedback CSV</a>
       </div>
     </div>
     <h3>Members</h3>

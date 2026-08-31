@@ -6,3 +6,4 @@ data/
 .DS_Store
 target/
 node_modules/
+public/

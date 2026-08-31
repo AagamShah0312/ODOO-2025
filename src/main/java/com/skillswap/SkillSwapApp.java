@@ -141,7 +141,7 @@ public class SkillSwapApp {
         if (path.equals("/api/logout") && method.equals("POST")) {
             platform.destroySession(cookie(exchange, "SKILLSWAP_SID"));
             Headers headers = exchange.getResponseHeaders();
-            headers.add("Set-Cookie", "SKILLSWAP_SID=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+            headers.add("Set-Cookie", "SKILLSWAP_SID=; " + cookieFlags(exchange).replace("Max-Age=604800", "Max-Age=0"));
             writeJson(exchange, 200, Map.of("ok", true));
             return;
         }
@@ -510,9 +510,28 @@ public class SkillSwapApp {
         headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
     }
 
+    private static String cookieFlags(HttpExchange exchange) {
+        String proto = exchange.getRequestHeaders().getFirst("X-Forwarded-Proto");
+        boolean secure = "https".equalsIgnoreCase(proto)
+                || "true".equalsIgnoreCase(System.getenv("COOKIE_SECURE"));
+        String sameSite = System.getenv("COOKIE_SAMESITE");
+        if (sameSite == null || sameSite.isBlank()) {
+            sameSite = "Lax";
+        }
+        if ("None".equalsIgnoreCase(sameSite)) {
+            secure = true;
+            sameSite = "None";
+        }
+        String flags = "Path=/; HttpOnly; SameSite=" + sameSite + "; Max-Age=604800";
+        if (secure) {
+            flags += "; Secure";
+        }
+        return flags;
+    }
+
     private static void setSession(HttpExchange exchange, String sid) {
         exchange.getResponseHeaders().add("Set-Cookie",
-                "SKILLSWAP_SID=" + sid + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800");
+                "SKILLSWAP_SID=" + sid + "; " + cookieFlags(exchange));
     }
 
     private static String cookie(HttpExchange exchange, String name) {

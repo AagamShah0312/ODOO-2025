@@ -1,6 +1,8 @@
 services:
   skillswap:
-    build: .
+    build:
+      context: .
+      pull: true
     image: skillswap:local
     container_name: skillswap
     ports:
@@ -9,6 +11,16 @@ services:
       PORT: "8080"
       SKILLSWAP_STATIC: /app/static
     restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    mem_limit: 512m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
       interval: 20s

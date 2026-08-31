@@ -82,11 +82,15 @@ function nav() {
   bar.querySelectorAll("[data-go]").forEach((b) => {
     b.onclick = async () => {
       state.view = b.dataset.go;
-      if (state.view === "discover") state.users = await api("/api/users");
-      if (state.view === "swaps") state.swaps = await api("/api/swaps");
-      if (state.view === "admin" && state.me?.isAdmin) {
-        state.adminUsers = await api("/api/admin/users");
-        state.adminSwaps = await api("/api/admin/swaps");
+      try {
+        if (state.view === "discover") state.users = await api("/api/users");
+        if (state.view === "swaps") state.swaps = await api("/api/swaps");
+        if (state.view === "admin" && state.me?.isAdmin) {
+          state.adminUsers = await api("/api/admin/users");
+          state.adminSwaps = await api("/api/admin/swaps");
+        }
+      } catch (err) {
+        console.error(err);
       }
       render();
     };
@@ -148,7 +152,7 @@ function viewAuth() {
           <div><label>Email</label><input name="email" type="email" required /></div>
         </div>
         <div class="row">
-          <div><label>Password</label><input name="password" type="password" required minlength="4" /></div>
+          <div><label>Password</label><input name="password" type="password" required minlength="6" /></div>
           <div><label>Location</label><input name="location" placeholder="City (optional)" /></div>
         </div>
         <label>Availability</label><input name="availability" placeholder="Weekends, evenings…" />
@@ -525,19 +529,25 @@ function viewAdmin() {
     } catch (err) { alert(err.message); }
   };
   wrap.querySelectorAll("[data-ban]").forEach((b) => b.onclick = async () => {
-    await api(`/api/admin/users/${b.dataset.ban}/ban`, { method: "POST" });
-    state.adminUsers = await api("/api/admin/users");
-    render();
+    try {
+      await api(`/api/admin/users/${b.dataset.ban}/ban`, { method: "POST" });
+      state.adminUsers = await api("/api/admin/users");
+      render();
+    } catch (err) { alert(err.message); }
   });
   wrap.querySelectorAll("[data-unban]").forEach((b) => b.onclick = async () => {
-    await api(`/api/admin/users/${b.dataset.unban}/unban`, { method: "POST" });
-    state.adminUsers = await api("/api/admin/users");
-    render();
+    try {
+      await api(`/api/admin/users/${b.dataset.unban}/unban`, { method: "POST" });
+      state.adminUsers = await api("/api/admin/users");
+      render();
+    } catch (err) { alert(err.message); }
   });
   wrap.querySelectorAll("[data-rm]").forEach((b) => b.onclick = async () => {
-    await api(`/api/admin/users/${b.dataset.rm}/remove-skill`, { method: "POST", body: JSON.stringify({ skill: b.dataset.skill }) });
-    state.adminUsers = await api("/api/admin/users");
-    render();
+    try {
+      await api(`/api/admin/users/${b.dataset.rm}/remove-skill`, { method: "POST", body: JSON.stringify({ skill: b.dataset.skill }) });
+      state.adminUsers = await api("/api/admin/users");
+      render();
+    } catch (err) { alert(err.message); }
   });
   return wrap;
 }

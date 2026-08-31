@@ -121,7 +121,7 @@ public class SkillSwapApp {
                         Json.stringList(body, "skillsWanted"),
                         Json.bool(body, "isPublic", true));
                 setSession(exchange, platform.createSession(user));
-                writeJson(exchange, 200, userJson(user, true));
+                writeJson(exchange, 200, userJson(user, user, true));
             } catch (IllegalArgumentException ex) {
                 writeJson(exchange, 400, Map.of("error", ex.getMessage()));
             }
@@ -132,7 +132,7 @@ public class SkillSwapApp {
             try {
                 User user = platform.login(Json.str(body, "email"), Json.str(body, "password"));
                 setSession(exchange, platform.createSession(user));
-                writeJson(exchange, 200, userJson(user, true));
+                writeJson(exchange, 200, userJson(user, user, true));
             } catch (IllegalArgumentException ex) {
                 writeJson(exchange, 400, Map.of("error", ex.getMessage()));
             }
@@ -150,7 +150,7 @@ public class SkillSwapApp {
                 writeJson(exchange, 401, Map.of("error", "Not signed in"));
                 return;
             }
-            writeJson(exchange, 200, userJson(me, true));
+            writeJson(exchange, 200, userJson(me, me, true));
             return;
         }
         if (path.equals("/api/me") && method.equals("PUT")) {
@@ -168,13 +168,13 @@ public class SkillSwapApp {
                     body.containsKey("skillsOffered") ? Json.stringList(body, "skillsOffered") : null,
                     body.containsKey("skillsWanted") ? Json.stringList(body, "skillsWanted") : null,
                     body.containsKey("isPublic") ? Json.bool(body, "isPublic", true) : null);
-            writeJson(exchange, 200, userJson(updated, true));
+            writeJson(exchange, 200, userJson(updated, me, true));
             return;
         }
         if (path.equals("/api/users") && method.equals("GET")) {
             List<Map<String, Object>> list = new ArrayList<>();
             for (User user : platform.publicUsers(me, query.get("q"), query.get("skill"))) {
-                list.add(userJson(user, false));
+                list.add(userJson(user, me, false));
             }
             writeJson(exchange, 200, list);
             return;
@@ -191,7 +191,7 @@ public class SkillSwapApp {
                 writeJson(exchange, 404, Map.of("error", "User not found"));
                 return;
             }
-            writeJson(exchange, 200, userJson(user, self || (me != null && me.isAdmin)));
+            writeJson(exchange, 200, userJson(user, me, self || (me != null && me.isAdmin)));
             return;
         }
         if (path.equals("/api/swaps") && method.equals("GET")) {
@@ -232,6 +232,19 @@ public class SkillSwapApp {
             mutateSwap(exchange, me, path, "reject");
             return;
         }
+        if (path.matches("/api/swaps/[^/]+/finish") && method.equals("POST")) {
+            if (me == null) {
+                writeJson(exchange, 401, Map.of("error", "Not signed in"));
+                return;
+            }
+            String id = path.split("/")[3];
+            try {
+                writeJson(exchange, 200, swapJson(platform.finish(me, id)));
+            } catch (IllegalArgumentException ex) {
+                writeJson(exchange, 400, Map.of("error", ex.getMessage()));
+            }
+            return;
+        }
         if (path.matches("/api/swaps/[^/]+/feedback") && method.equals("POST")) {
             if (me == null) {
                 writeJson(exchange, 401, Map.of("error", "Not signed in"));
@@ -268,7 +281,7 @@ public class SkillSwapApp {
                 return;
             }
             if (path.equals("/api/admin/users") && method.equals("GET")) {
-                writeJson(exchange, 200, platform.allUsers().stream().map(u -> userJson(u, true)).toList());
+                writeJson(exchange, 200, platform.allUsers().stream().map(u -> userJson(u, me, true)).toList());
                 return;
             }
             if (path.matches("/api/admin/users/[^/]+/ban") && method.equals("POST")) {
@@ -343,7 +356,7 @@ public class SkillSwapApp {
         }
     }
 
-    private Map<String, Object> userJson(User user, boolean privateFields) {
+    private Map<String, Object> userJson(User user, User viewer, boolean privateFields) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("id", user.id);
         map.put("name", user.name);
@@ -355,9 +368,16 @@ public class SkillSwapApp {
         map.put("initials", user.initials());
         map.put("skillsOffered", user.skillsOffered);
         map.put("skillsWanted", user.skillsWanted);
-        map.put("rating", Math.round(platform.averageRating(user) * 10.0) / 10.0);
-        map.put("ratingCount", platform.ratingCount(user));
-        map.put("feedback", user.feedbackList);
+        boolean self = viewer != null && viewer.id.equals(user.id);
+        if (self) {
+            map.put("rating", 0);
+            map.put("ratingCount", 0);
+            map.put("feedback", List.of());
+        } else {
+            map.put("rating", Math.round(platform.averageRating(user) * 10.0) / 10.0);
+            map.put("ratingCount", platform.ratingCount(user));
+            map.put("feedback", user.feedbackList);
+        }
         if (privateFields) {
             map.put("email", user.email);
             map.put("isAdmin", user.isAdmin);
@@ -382,6 +402,10 @@ public class SkillSwapApp {
         map.put("fromComment", swap.fromComment);
         map.put("toRating", swap.toRating);
         map.put("toComment", swap.toComment);
+        if (swap.contactUnlocked()) {
+            map.put("fromEmail", swap.from != null ? swap.from.email : "");
+            map.put("toEmail", swap.to != null ? swap.to.email : "");
+        }
         return map;
     }
 

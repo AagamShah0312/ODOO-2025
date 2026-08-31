@@ -40,7 +40,15 @@ public class SwapRequest {
     }
 
     public boolean isAccepted() {
-        return "accepted".equals(status) || "completed".equals(status);
+        return "accepted".equals(status) || "finished".equals(status) || "completed".equals(status);
+    }
+
+    public boolean contactUnlocked() {
+        return isAccepted();
+    }
+
+    public boolean canLeaveFeedback() {
+        return "finished".equals(status) || "completed".equals(status);
     }
 
     public String fromNameSafe() {

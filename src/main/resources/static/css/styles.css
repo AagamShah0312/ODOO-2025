@@ -236,6 +236,14 @@ textarea { min-height: 80px; resize: vertical; }
   padding: 14px 16px;
 }
 .swap.accepted { border-left-color: var(--sage); }
+.swap.finished { border-left-color: var(--gold); }
+.contact {
+  background: #e7f0ea;
+  border: 1px dashed var(--sage);
+  padding: 10px 12px;
+  margin: 8px 0;
+}
+.contact a { color: var(--copper-deep); font-weight: 700; }
 .swap.rejected, .swap.cancelled { border-left-color: #999; opacity: 0.85; }
 .status {
   font-family: "Segoe UI", sans-serif;

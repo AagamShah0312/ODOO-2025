@@ -227,6 +227,10 @@ function userCard(u) {
     </article>`;
 }
 
+function visibleUsers() {
+  return (state.users || []).filter((u) => !state.me || u.id !== state.me.id);
+}
+
 function viewDiscover() {
   const wrap = document.createElement("section");
   wrap.innerHTML = `
@@ -238,13 +242,13 @@ function viewDiscover() {
       <input id="skill" placeholder="Filter by skill" />
       <button class="btn primary" id="search">Search</button>
     </div>
-    <div class="grid" id="cards">${state.users.map(userCard).join("") || `<div class="empty">No public desks match that.</div>`}</div>
+    <div class="grid" id="cards">${visibleUsers().map(userCard).join("") || `<div class="empty">No public desks match that.</div>`}</div>
   `;
   const run = async () => {
     const q = wrap.querySelector("#q").value;
     const skill = wrap.querySelector("#skill").value;
     state.users = await api(`/api/users?q=${encodeURIComponent(q)}&skill=${encodeURIComponent(skill)}`);
-    wrap.querySelector("#cards").innerHTML = state.users.map(userCard).join("") || `<div class="empty">No public desks match that.</div>`;
+    wrap.querySelector("#cards").innerHTML = visibleUsers().map(userCard).join("") || `<div class="empty">No public desks match that.</div>`;
     bindCards(wrap);
   };
   wrap.querySelector("#search").onclick = run;
@@ -283,14 +287,15 @@ function viewPerson() {
           <div>
             <h2>${escapeHtml(u.name)}</h2>
             <p class="meta">${escapeHtml(u.location || "Somewhere")} · ${escapeHtml(u.availability || "Flexible")} · ${u.isPublic ? "Public" : "Private"}</p>
-            <div class="stars">${stars(u.rating)} ${u.ratingCount ? u.rating + " · " + u.ratingCount + " notes" : "No ratings yet"}</div>
+            ${me && me.id === u.id ? "" : `<div class="stars">${stars(u.rating)} ${u.ratingCount ? u.rating + " · " + u.ratingCount + " notes" : "No ratings yet"}</div>`}
           </div>
         </div>
         <p class="lede">${escapeHtml(u.bio || "No bio yet.")}</p>
         <h3>Offers</h3>${pills(u.skillsOffered)}
         <h3>Wants</h3>${pills(u.skillsWanted, "want")}
+        ${me && me.id === u.id ? "" : `
         <h3>Feedback</h3>
-        <ul>${(u.feedback || []).map((f) => `<li>${escapeHtml(f)}</li>`).join("") || "<li class='hint'>Quiet so far.</li>"}</ul>
+        <ul>${(u.feedback || []).map((f) => `<li>${escapeHtml(f)}</li>`).join("") || "<li class='hint'>Quiet so far.</li>"}</ul>`}
       </div>
       <div class="panel">
         <h2>Propose a swap</h2>
@@ -400,6 +405,7 @@ function viewSwaps() {
       try {
         if (b.dataset.act === "accept") await api(`/api/swaps/${id}/accept`, { method: "POST" });
         if (b.dataset.act === "reject") await api(`/api/swaps/${id}/reject`, { method: "POST" });
+        if (b.dataset.act === "finish") await api(`/api/swaps/${id}/finish`, { method: "POST" });
         if (b.dataset.act === "delete") await api(`/api/swaps/${id}`, { method: "DELETE" });
         if (b.dataset.act === "feedback") {
           const rating = Number(wrap.querySelector(`[data-rate="${id}"]`).value);
@@ -418,28 +424,41 @@ function viewSwaps() {
 
 function swapCard(s, dir) {
   const other = dir === "in" ? s.fromName : s.toName;
+  const partnerEmail = dir === "in" ? s.fromEmail : s.toEmail;
   const canRespond = dir === "in" && s.status === "pending";
   const canDelete = dir === "out" && s.status === "pending";
-  const canRate = (s.status === "accepted" || s.status === "completed");
+  const canFinish = s.status === "accepted";
+  const canRate = s.status === "finished" || s.status === "completed";
   const already = dir === "in" ? s.toRating : s.fromRating;
+  const contact = (s.fromEmail || s.toEmail) ? `
+      <div class="contact">
+        <p class="meta">Emails unlocked — write to each other to set a time.</p>
+        <p><strong>Reach ${escapeHtml(other)}:</strong>
+          <a href="mailto:${escapeHtml(partnerEmail || "")}">${escapeHtml(partnerEmail || "")}</a>
+        </p>
+        <p class="hint">${escapeHtml(s.fromName)}: ${escapeHtml(s.fromEmail || "")} · ${escapeHtml(s.toName)}: ${escapeHtml(s.toEmail || "")}</p>
+      </div>` : "";
   return `
     <article class="swap ${s.status}">
       <div class="status">${escapeHtml(s.status)} · ${escapeHtml(s.createdAt)}</div>
       <strong>${escapeHtml(other)}</strong>
       <p>${escapeHtml(s.fromName)} teaches <em>${escapeHtml(s.skillOffered)}</em> · ${escapeHtml(s.toName)} teaches <em>${escapeHtml(s.skillWanted)}</em></p>
       ${s.message ? `<p class="hint">“${escapeHtml(s.message)}”</p>` : ""}
+      ${contact}
       <div class="actions">
         ${canRespond ? `<button class="btn primary" data-act="accept" data-id="${s.id}">Accept</button>
                         <button class="btn danger" data-act="reject" data-id="${s.id}">Reject</button>` : ""}
         ${canDelete ? `<button class="btn" data-act="delete" data-id="${s.id}">Withdraw</button>` : ""}
+        ${canFinish ? `<button class="btn copper" data-act="finish" data-id="${s.id}">Skill finished</button>` : ""}
       </div>
+      ${canFinish ? `<p class="hint">Meet over email first. When the lessons are done, mark the skill finished so you can rate each other.</p>` : ""}
       ${canRate && !already ? `
-        <label>Rating</label>
+        <label>How did it go?</label>
         <select data-rate="${s.id}">
           <option>5</option><option>4</option><option>3</option><option>2</option><option>1</option>
         </select>
-        <input data-comment="${s.id}" placeholder="How did it go?" />
-        <button class="btn copper" data-act="feedback" data-id="${s.id}">Leave note</button>` : ""}
+        <input data-comment="${s.id}" placeholder="A short note for their public desk" />
+        <button class="btn copper" data-act="feedback" data-id="${s.id}">Leave feedback</button>` : ""}
       ${already ? `<p class="hint">You rated this ${already}/5.</p>` : ""}
     </article>`;
 }

@@ -145,8 +145,10 @@ public class SkillSwapPlatform {
             if (user.isBanned) {
                 continue;
             }
-            boolean self = viewer != null && viewer.id.equals(user.id);
-            if (!user.isPublic && !self && (viewer == null || !viewer.isAdmin)) {
+            if (viewer != null && viewer.id.equals(user.id)) {
+                continue;
+            }
+            if (!user.isPublic && (viewer == null || !viewer.isAdmin)) {
                 continue;
             }
             if (!q.isEmpty()) {
@@ -256,10 +258,25 @@ public class SkillSwapPlatform {
         request.resolvedAt = Instant.now();
     }
 
+    public synchronized SwapRequest finish(User user, String swapId) {
+        SwapRequest request = requireSwap(swapId);
+        if (!request.fromId.equals(user.id) && !request.toId.equals(user.id)) {
+            throw new IllegalArgumentException("You are not part of this swap.");
+        }
+        if (!"accepted".equals(request.status) && !request.canLeaveFeedback()) {
+            throw new IllegalArgumentException("Only an accepted swap can be marked finished.");
+        }
+        if ("accepted".equals(request.status)) {
+            request.status = "finished";
+            request.resolvedAt = Instant.now();
+        }
+        return request;
+    }
+
     public synchronized SwapRequest addFeedback(User user, String swapId, int rating, String comment) {
         SwapRequest request = requireSwap(swapId);
-        if (!request.isAccepted()) {
-            throw new IllegalArgumentException("Feedback is only allowed after a swap is accepted.");
+        if (!request.canLeaveFeedback()) {
+            throw new IllegalArgumentException("Feedback is only allowed after both of you mark the skill as finished.");
         }
         if (rating < 1 || rating > 5) {
             throw new IllegalArgumentException("Rating must be between 1 and 5.");
@@ -411,6 +428,7 @@ public class SkillSwapPlatform {
         SwapRequest s1 = sendSwapRequest(aisha, ravi, "Photoshop", "Java",
                 "I can walk you through poster layouts if you help me with Java collections.");
         accept(ravi, s1.id);
+        finish(ravi, s1.id);
         addFeedback(ravi, s1.id, 5, "Clear, patient, and brought example files.");
         addFeedback(aisha, s1.id, 4, "Great Java crash course. Notes were gold.");
 

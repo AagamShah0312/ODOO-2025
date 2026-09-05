@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.ZoneId;
+import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -26,38 +27,96 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class SkillSwapApp {
     private static final int MAX_BODY = 64 * 1024;
     private static final int MAX_PATH = 500;
     private static final long AUTH_WINDOW_MS = 10 * 60 * 1000L;
     private static final int AUTH_MAX_ATTEMPTS = 15;
+    private static final int HTTP_WORKERS = 32;
+    private static final int HTTP_QUEUE_CAPACITY = 256;
     private static final DateTimeFormatter TIME =
             DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm").withZone(ZoneId.systemDefault());
     private final SkillSwapPlatform platform = new SkillSwapPlatform();
     private final Path staticRoot;
     private final Map<String, ArrayDeque<Long>> authAttempts = new ConcurrentHashMap<>();
+    private final long startedAt = System.currentTimeMillis();
+    private final AtomicLong lastMaintenanceAt = new AtomicLong(0);
+    private final AtomicLong lastMaintenanceErrorAt = new AtomicLong(0);
 
     public SkillSwapApp(Path staticRoot) {
         this.staticRoot = staticRoot;
-        platform.seed();
+        configureInitialData();
     }
 
     public static void main(String[] args) throws Exception {
         int port = 8080;
         String portEnv = System.getenv("PORT");
         if (portEnv != null && !portEnv.isBlank()) {
-            port = Integer.parseInt(portEnv);
+            try {
+                port = Integer.parseInt(portEnv);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("PORT must be a valid number", e);
+            }
+        }
+        if (port < 1 || port > 65535) {
+            throw new IllegalArgumentException("PORT must be between 1 and 65535");
         }
         Path root = resolveStatic();
         SkillSwapApp app = new SkillSwapApp(root);
-        HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
+        HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 128);
         server.createContext("/", app::handle);
-        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
+        server.setExecutor(new ThreadPoolExecutor(
+                HTTP_WORKERS, HTTP_WORKERS, 0L, TimeUnit.MILLISECONDS,
+                new java.util.concurrent.ArrayBlockingQueue<>(HTTP_QUEUE_CAPACITY),
+                new ThreadPoolExecutor.CallerRunsPolicy()));
+        app.startMaintenance();
         System.out.println("SkillSwap running on http://0.0.0.0:" + port);
         System.out.println("Static files: " + root.toAbsolutePath());
-        System.out.println("Demo admin: admin@skillswap.local / admin123");
         server.start();
+    }
+
+    private void configureInitialData() {
+        if ("true".equalsIgnoreCase(System.getenv("SKILLSWAP_DEMO_DATA"))) {
+            platform.seed();
+            System.out.println("Demo data enabled; never enable it on a public deployment.");
+            return;
+        }
+        String email = System.getenv("SKILLSWAP_ADMIN_EMAIL");
+        String password = System.getenv("SKILLSWAP_ADMIN_PASSWORD");
+        if ((email == null || email.isBlank()) && (password == null || password.isBlank())) {
+            return;
+        }
+        if (email == null || email.isBlank() || password == null || password.isBlank()) {
+            throw new IllegalStateException("Set both SKILLSWAP_ADMIN_EMAIL and SKILLSWAP_ADMIN_PASSWORD.");
+        }
+        String name = System.getenv("SKILLSWAP_ADMIN_NAME");
+        platform.bootstrapAdmin(name == null || name.isBlank() ? "Platform Admin" : name, email, password);
+    }
+
+    private void startMaintenance() {
+        runMaintenance();
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread thread = new Thread(r, "skillswap-maintenance");
+            thread.setDaemon(true);
+            return thread;
+        });
+        scheduler.scheduleWithFixedDelay(this::runMaintenance, 1, 1, TimeUnit.MINUTES);
+    }
+
+    private void runMaintenance() {
+        try {
+            platform.purgeExpiredSessions();
+            lastMaintenanceAt.set(System.currentTimeMillis());
+        } catch (RuntimeException e) {
+            lastMaintenanceErrorAt.set(System.currentTimeMillis());
+            System.err.println("Maintenance checkpoint failed: " + e.getMessage());
+        }
     }
 
     private static Path resolveStatic() {
@@ -126,7 +185,18 @@ public class SkillSwapApp {
         Map<String, String> query = query(exchange);
 
         if (path.equals("/api/health") && method.equals("GET")) {
-            writeJson(exchange, 200, Map.of("ok", true));
+            long lastRun = lastMaintenanceAt.get();
+            long lastFailure = lastMaintenanceErrorAt.get();
+            boolean ready = lastRun > 0 && lastFailure <= lastRun;
+            Map<String, Object> health = new LinkedHashMap<>();
+            health.put("ok", ready);
+            health.put("status", ready ? "ready" : "degraded");
+            health.put("uptimeSeconds", (System.currentTimeMillis() - startedAt) / 1000);
+            health.put("lastMaintenanceAt", lastRun == 0 ? null : Instant.ofEpochMilli(lastRun).toString());
+            if (lastFailure > lastRun) {
+                health.put("lastMaintenanceErrorAt", Instant.ofEpochMilli(lastFailure).toString());
+            }
+            writeJson(exchange, ready ? 200 : 503, health);
             return;
         }
         if (path.equals("/api/stats") && method.equals("GET")) {

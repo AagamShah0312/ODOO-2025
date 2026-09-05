@@ -152,7 +152,7 @@ function viewAuth() {
           <div><label>Email</label><input name="email" type="email" required /></div>
         </div>
         <div class="row">
-          <div><label>Password</label><input name="password" type="password" required minlength="6" /></div>
+          <div><label>Password</label><input name="password" type="password" required minlength="8" /></div>
           <div><label>Location</label><input name="location" placeholder="City (optional)" /></div>
         </div>
         <label>Availability</label><input name="availability" placeholder="Weekends, evenings…" />
@@ -164,7 +164,7 @@ function viewAuth() {
       </form>
       <div class="demo-grid">
         <div class="demo"><span>Aisha · Photoshop</span><button class="btn" data-demo="aisha@skillswap.local" data-pw="aisha123">Try</button></div>
-        <div class="demo"><span>Ravi · Java</span><button class="btn" data-demo="ravi@skillswap.local" data-pw="ravi123">Try</button></div>
+        <div class="demo"><span>Ravi · Java</span><button class="btn" data-demo="ravi@skillswap.local" data-pw="ravi1234">Try</button></div>
         <div class="demo"><span>Admin desk</span><button class="btn" data-demo="admin@skillswap.local" data-pw="admin123">Try</button></div>
       </div>
     </div>`;

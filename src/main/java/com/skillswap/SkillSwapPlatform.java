@@ -432,6 +432,14 @@ public class SkillSwapPlatform {
         User adminUser = register("Platform Admin", "admin@skillswap.local", "admin123",
                 "HQ", "", "Always", "Keeps the desk in order.", List.of("Moderation"), List.of(), false);
         adminUser.isAdmin = true;
+        User communityAdmin = register("Anika Bose", "anika.admin@skillswap.local", "anikaadmin123",
+                "Mumbai", "", "Weekdays", "Community manager and swap moderator.",
+                List.of("Community Building", "Event Planning"), List.of("Photography"), false);
+        communityAdmin.isAdmin = true;
+        User safetyAdmin = register("Dev Malhotra", "dev.admin@skillswap.local", "devadmin123",
+                "Delhi", "", "Weekday evenings", "Reviews reports and keeps the marketplace welcoming.",
+                List.of("Online Safety", "Public Speaking"), List.of("UI Design"), false);
+        safetyAdmin.isAdmin = true;
 
         User aisha = register("Aisha Rahman", "aisha@skillswap.local", "aisha123",
                 "Mumbai", "", "Weekends", "Designs posters for community theatres.",
@@ -463,6 +471,27 @@ public class SkillSwapPlatform {
                 "Trade a beginner photography walk for two guitar lessons?");
         sendSwapRequest(kabir, aisha, "Excel", "Photoshop",
                 "Need a one-pager designed. I can clean your budget sheet in return.");
+
+        SwapRequest s2 = sendSwapRequest(aisha, meera, "UI Design", "Guitar",
+                "A landing-page design review for a beginner guitar lesson?");
+        accept(meera, s2.id);
+        finish(aisha, s2.id);
+        addFeedback(aisha, s2.id, 5, "A warm, practical lesson that made chord changes click.");
+        addFeedback(meera, s2.id, 5, "Thoughtful UI critique with clear next steps.");
+
+        SwapRequest s3 = sendSwapRequest(ravi, nora, "SQL", "Photography",
+                "I can help structure your photo catalogue database.");
+        accept(nora, s3.id);
+        finish(nora, s3.id);
+        addFeedback(nora, s3.id, 4, "Helpful database session and great examples.");
+
+        SwapRequest s4 = sendSwapRequest(nora, kabir, "Cooking", "Excel",
+                "Would you trade a meal-prep session for spreadsheet formulas?");
+        reject(kabir, s4.id);
+
+        SwapRequest s5 = sendSwapRequest(meera, ravi, "Yoga", "Spring",
+                "A relaxed yoga session in exchange for Spring setup help.");
+        accept(ravi, s5.id);
 
         admin.sendPlatformMessage("Welcome to SkillSwap — list a skill you can teach and one you want to learn.");
     }

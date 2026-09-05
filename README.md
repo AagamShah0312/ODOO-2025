@@ -1,77 +1,55 @@
 # SkillSwap
 
-A Java skill-barter desk for the Odoo Hackathon problem statement: people list what they can teach, ask for something back, and settle the swap with a rating.
+SkillSwap is a full-stack Java marketplace where people exchange skills instead of money. Members create a profile, discover people who teach what they want to learn, propose a swap, and leave feedback when it is complete.
 
-The original Swing screens are replaced by a small **zero-dependency Java HTTP server** so the app can run in a browser and in Docker.
+Built as an Odoo Hackathon project and designed as a polished, self-contained portfolio demo.
 
-## What you can do
+## Highlights
 
-**Members**
-- Register / sign in (PBKDF2 password hashing, cookie sessions)
-- Profile: name, location, photo URL, bio, availability, public or private
-- Skills offered and skills wanted
-- Browse and search public desks by name or skill (`Photoshop`, `Excel`, `Java`…)
-- Send a swap, accept or reject incoming ones, withdraw a pending outgoing request
-- Leave a 1–5 rating and a note after a swap is accepted
+- Browse public skill profiles and search by name or skill
+- Register, sign in, and manage a public or private profile
+- Send, accept, reject, withdraw, and finish skill-swap requests
+- Unlock contact details only after a swap is accepted
+- Leave one rating and feedback note per participant
+- Admin dashboard for moderation, broadcasts, and CSV reports
+- Scheduled maintenance checkpoint with a readiness endpoint at `/api/health`
 
-**Admin** (configured through deployment environment variables)
-- Strip a spammy skill from a profile
-- Ban / unban members
-- Watch pending, accepted, rejected, cancelled, and completed swaps
-- Broadcast a desk-wide note
-- Download CSV reports (users, swaps, feedback)
+## Demo accounts
 
-## Run locally
+The local demo seeds **3 admins and 6 members**. All demo passwords are intentionally public and must only be used with `SKILLSWAP_DEMO_DATA=true`.
 
-**Docker**
+| Role | Name | Email | Password |
+| --- | --- | --- | --- |
+| Admin | Platform Admin | admin@skillswap.local | admin123 |
+| Admin | Anika Bose | anika.admin@skillswap.local | anikaadmin123 |
+| Admin | Dev Malhotra | dev.admin@skillswap.local | devadmin123 |
+| Member | Aisha Rahman | aisha@skillswap.local | aisha123 |
+| Member | Ravi Mehta | ravi@skillswap.local | ravi1234 |
+| Member | Meera Iyer | meera@skillswap.local | meera123 |
+| Member | Kabir Singh | kabir@skillswap.local | kabir123 |
+| Member | Nora D'Souza | nora@skillswap.local | nora123 |
+| Member | Private Patil | patil@skillswap.local | patil123 |
 
-```bash
-docker compose up --build
+The seed data includes pending, accepted, rejected, finished, and completed swaps, plus feedback and ratings. Sign in as any admin to explore moderation and reports.
+
+## Tech
+
+- Java 21, using the JDK `HttpServer`
+- Vanilla HTML, CSS, and JavaScript
+- Docker and Docker Compose
+- PBKDF2 password hashing, server-side sessions, CORS controls, and security headers
+
+## Project structure
+
+```text
+src/main/java/com/skillswap/       domain logic and HTTP API
+src/main/resources/static/         browser UI
+Dockerfile                         production container image
+docker-compose.yml                 local demo environment
+render.yaml                        Render Blueprint
+vercel.json                        Vercel static-UI configuration
 ```
 
-Open [http://localhost:8080](http://localhost:8080).
+## Documentation
 
-Docker Compose enables `SKILLSWAP_DEMO_DATA=true` for local sample accounts only.
-Never enable demo data on a public deployment.
-
-**JDK 17+**
-
-```bash
-chmod +x compile.sh run.sh
-./run.sh
-```
-
-## Deploy (Render + Vercel)
-
-This is a Java server. **Render can host it. Vercel cannot run Java.**
-
-Step-by-step: [DEPLOY.md](DEPLOY.md)
-
-- **Render:** New Web Service → Docker → this repo → health check `/api/health`
-- **Vercel (optional UI only):** deploy static files and set `SKILLSWAP_API` to your Render URL
-
-## Demo seats
-
-Available only with `SKILLSWAP_DEMO_DATA=true`.
-
-| Who | Email | Password |
-| --- | --- | --- |
-| Admin | admin@skillswap.local | admin123 |
-| Aisha (Photoshop) | aisha@skillswap.local | aisha123 |
-| Ravi (Java) | ravi@skillswap.local | ravi1234 |
-| Meera (Guitar) | meera@skillswap.local | meera123 |
-| Kabir (Excel) | kabir@skillswap.local | kabir123 |
-| Nora (Photography) | nora@skillswap.local | nora123 |
-
-`Private Patil` has a private profile and does not appear on the public floor.
-
-## Layout
-
-```
-src/main/java/com/skillswap/   domain + HTTP server
-src/main/resources/static/     editorial UI
-Dockerfile
-docker-compose.yml
-```
-
-No Maven, no extra JARs — `javac` and the JDK `HttpServer` are enough.
+For local setup, the cron/health checkpoint, and Vercel + Render deployment, see [readme1.md](readme1.md).

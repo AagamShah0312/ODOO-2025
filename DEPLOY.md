@@ -22,6 +22,9 @@ Open http://localhost:8080
 
 Stop with `Ctrl+C`, or `docker compose down`.
 
+The Compose file enables `SKILLSWAP_DEMO_DATA=true` so sample accounts are present
+locally. Do not copy that setting to a public host.
+
 ### Option B — JDK on your machine
 
 1. Install **JDK 17 or newer**  
@@ -52,7 +55,7 @@ Open http://localhost:8080
 | Who | Email | Password |
 | --- | --- | --- |
 | Aisha | aisha@skillswap.local | aisha123 |
-| Ravi | ravi@skillswap.local | ravi123 |
+| Ravi | ravi@skillswap.local | ravi1234 |
 | Admin | admin@skillswap.local | admin123 |
 
 ---
@@ -72,6 +75,16 @@ Render builds the `Dockerfile` and keeps the server alive.
    - **Health check path:** `/api/health`
 5. Click **Create Web Service**. First build takes a few minutes.
 6. Open the `https://something.onrender.com` URL Render gives you.
+
+Before deployment, add these variables under **Environment**:
+
+- `SKILLSWAP_ADMIN_EMAIL` = your administrator email
+- `SKILLSWAP_ADMIN_PASSWORD` = a long, unique administrator password
+- `SKILLSWAP_ADMIN_NAME` = optional administrator display name
+
+Do not set `SKILLSWAP_DEMO_DATA` on Render. The app runs a one-minute maintenance
+checkpoint to remove expired sessions. `/api/health` reports readiness and the last
+successful checkpoint, which Render uses as its health check.
 
 `render.yaml` is in the repo, so you can also use **New → Blueprint** and point it at the repo.
 
@@ -99,7 +112,7 @@ Deploy only on Render. That one URL is the full app.
 2. On Render, add environment variables:
    - `COOKIE_SAMESITE` = `None`
    - `COOKIE_SECURE` = `true`  
-   Then **Manual Deploy → Deploy latest commit** so cookies work from another origin.
+   These allow the browser to send the Render session cookie from Vercel.
 3. Go to [https://vercel.com](https://vercel.com) → **Add New → Project** → import the same GitHub repo.
 4. Vercel project settings:
    - **Framework preset:** Other
@@ -108,7 +121,9 @@ Deploy only on Render. That one URL is the full app.
 5. Add environment variable:
    - `SKILLSWAP_API` = `https://skillswap-xxxx.onrender.com`  
      (your real Render URL, no trailing slash)
-6. Deploy. The Vercel URL loads the UI; login/API calls go to Render.
+6. Deploy. Copy the Vercel production URL, then on Render add `SKILLSWAP_CORS` with
+   that exact URL (for example, `https://skillswap.vercel.app`; no trailing slash).
+   Redeploy Render. The Vercel URL now loads the UI and login/API calls go to Render.
 
 If login seems to “work” then bounce you out, the Render cookie settings in step 2 are missing.
 

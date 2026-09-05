@@ -99,6 +99,13 @@ public class SkillSwapPlatform {
         }
     }
 
+    /** Runs lightweight periodic maintenance without exposing session data. */
+    public int purgeExpiredSessions() {
+        int before = sessions.size();
+        sessions.entrySet().removeIf(e -> e.getValue().expired());
+        return before - sessions.size();
+    }
+
     public synchronized User userForSession(String sid) {
         if (sid == null || sid.length() > 80) {
             return null;
@@ -117,10 +124,6 @@ public class SkillSwapPlatform {
             return null;
         }
         return user;
-    }
-
-    private void purgeExpiredSessions() {
-        sessions.entrySet().removeIf(e -> e.getValue().expired());
     }
 
     public synchronized User updateProfile(User user, String name, String location, String photo,
@@ -433,7 +436,7 @@ public class SkillSwapPlatform {
         User aisha = register("Aisha Rahman", "aisha@skillswap.local", "aisha123",
                 "Mumbai", "", "Weekends", "Designs posters for community theatres.",
                 List.of("Photoshop", "UI Design", "Figma"), List.of("Java", "Excel"), true);
-        User ravi = register("Ravi Mehta", "ravi@skillswap.local", "ravi123",
+        User ravi = register("Ravi Mehta", "ravi@skillswap.local", "ravi1234",
                 "Pune", "", "Weekday evenings", "Writes backend services and terrible dad jokes.",
                 List.of("Java", "Spring", "SQL"), List.of("Guitar", "Spanish"), true);
         User meera = register("Meera Iyer", "meera@skillswap.local", "meera123",
@@ -462,6 +465,18 @@ public class SkillSwapPlatform {
                 "Need a one-pager designed. I can clean your budget sheet in return.");
 
         admin.sendPlatformMessage("Welcome to SkillSwap — list a skill you can teach and one you want to learn.");
+    }
+
+    /**
+     * Creates the first production administrator. Credentials must come from
+     * environment variables; demo credentials are never used for this path.
+     */
+    public synchronized void bootstrapAdmin(String name, String email, String password) {
+        if (!usersById.isEmpty()) {
+            throw new IllegalStateException("An administrator can only be bootstrapped into an empty store.");
+        }
+        User adminUser = register(name, email, password, "", "", "", "", List.of(), List.of(), false);
+        adminUser.isAdmin = true;
     }
 
     private SwapRequest requireSwap(String id) {
@@ -540,8 +555,8 @@ public class SkillSwapPlatform {
 
     private static void requirePassword(String password) {
         String s = safe(password);
-        if (s.length() < 6) {
-            throw new IllegalArgumentException("Password must be at least 6 characters");
+        if (s.length() < 8) {
+            throw new IllegalArgumentException("Password must be at least 8 characters");
         }
         if (s.length() > 128) {
             throw new IllegalArgumentException("Password too long");

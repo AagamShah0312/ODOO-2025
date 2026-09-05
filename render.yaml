@@ -7,3 +7,9 @@ services:
     envVars:
       - key: SKILLSWAP_STATIC
         value: /app/static
+      - key: SKILLSWAP_ADMIN_EMAIL
+        sync: false
+      - key: SKILLSWAP_ADMIN_PASSWORD
+        sync: false
+      - key: SKILLSWAP_ADMIN_NAME
+        value: Platform Admin

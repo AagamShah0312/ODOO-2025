@@ -10,6 +10,7 @@ services:
     environment:
       PORT: "8080"
       SKILLSWAP_STATIC: /app/static
+      SKILLSWAP_DEMO_DATA: "true"
     restart: unless-stopped
     init: true
     read_only: true
@@ -26,3 +27,4 @@ services:
       interval: 20s
       timeout: 5s
       retries: 5
+      start_period: 15s

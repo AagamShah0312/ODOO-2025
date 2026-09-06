@@ -142,7 +142,7 @@ function viewAuth() {
       </div>
       <form id="login-form">
         <label>Email</label><input name="email" type="email" required value="aisha@skillswap.local" />
-        <label>Password</label><input name="password" type="password" required value="aisha123" />
+        <label>Password</label><input name="password" type="password" required value="aisha12345" />
         <div class="actions"><button class="btn primary" type="submit">Enter</button></div>
         <p class="error" id="auth-error"></p>
       </form>
@@ -163,9 +163,9 @@ function viewAuth() {
         <p class="error" id="reg-error"></p>
       </form>
       <div class="demo-grid">
-        <div class="demo"><span>Aisha · Photoshop</span><button class="btn" data-demo="aisha@skillswap.local" data-pw="aisha123">Try</button></div>
+        <div class="demo"><span>Aisha · Photoshop</span><button class="btn" data-demo="aisha@skillswap.local" data-pw="aisha12345">Try</button></div>
         <div class="demo"><span>Ravi · Java</span><button class="btn" data-demo="ravi@skillswap.local" data-pw="ravi1234">Try</button></div>
-        <div class="demo"><span>Admin desk</span><button class="btn" data-demo="admin@skillswap.local" data-pw="admin123">Try</button></div>
+        <div class="demo"><span>Admin desk</span><button class="btn" data-demo="admin@skillswap.local" data-pw="aagamadmin123">Try</button></div>
       </div>
     </div>`;
   wrap.querySelector("#tab-login").onclick = () => {

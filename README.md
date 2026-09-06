@@ -20,15 +20,15 @@ The local demo seeds **3 admins and 6 members**. All demo passwords are intentio
 
 | Role | Name | Email | Password |
 | --- | --- | --- | --- |
-| Admin | Platform Admin | admin@skillswap.local | admin123 |
+| Admin | Platform Admin | admin@skillswap.local | aagamadmin123 |
 | Admin | Anika Bose | anika.admin@skillswap.local | anikaadmin123 |
 | Admin | Dev Malhotra | dev.admin@skillswap.local | devadmin123 |
-| Member | Aisha Rahman | aisha@skillswap.local | aisha123 |
+| Member | Aisha Rahman | aisha@skillswap.local | aisha12345 |
 | Member | Ravi Mehta | ravi@skillswap.local | ravi1234 |
-| Member | Meera Iyer | meera@skillswap.local | meera123 |
-| Member | Kabir Singh | kabir@skillswap.local | kabir123 |
-| Member | Nora D'Souza | nora@skillswap.local | nora123 |
-| Member | Private Patil | patil@skillswap.local | patil123 |
+| Member | Meera Iyer | meera@skillswap.local | meera12345 |
+| Member | Kabir Singh | kabir@skillswap.local | kabir12345 |
+| Member | Nora D'Souza | nora@skillswap.local | nora12345 |
+| Member | Private Patil | patil@skillswap.local | patil12345 |
 
 The seed data includes pending, accepted, rejected, finished, and completed swaps, plus feedback and ratings. Sign in as any admin to explore moderation and reports.
 

@@ -429,7 +429,7 @@ public class SkillSwapPlatform {
         if (!usersById.isEmpty()) {
             return;
         }
-        User adminUser = register("Platform Admin", "admin@skillswap.local", "admin123",
+        User adminUser = register("Platform Admin", "admin@skillswap.local", "aagamadmin123",
                 "HQ", "", "Always", "Keeps the desk in order.", List.of("Moderation"), List.of(), false);
         adminUser.isAdmin = true;
         User communityAdmin = register("Anika Bose", "anika.admin@skillswap.local", "anikaadmin123",
@@ -441,22 +441,22 @@ public class SkillSwapPlatform {
                 List.of("Online Safety", "Public Speaking"), List.of("UI Design"), false);
         safetyAdmin.isAdmin = true;
 
-        User aisha = register("Aisha Rahman", "aisha@skillswap.local", "aisha123",
+        User aisha = register("Aisha Rahman", "aisha@skillswap.local", "aisha12345",
                 "Mumbai", "", "Weekends", "Designs posters for community theatres.",
                 List.of("Photoshop", "UI Design", "Figma"), List.of("Java", "Excel"), true);
         User ravi = register("Ravi Mehta", "ravi@skillswap.local", "ravi1234",
                 "Pune", "", "Weekday evenings", "Writes backend services and terrible dad jokes.",
                 List.of("Java", "Spring", "SQL"), List.of("Guitar", "Spanish"), true);
-        User meera = register("Meera Iyer", "meera@skillswap.local", "meera123",
+        User meera = register("Meera Iyer", "meera@skillswap.local", "meera12345",
                 "Ahmedabad", "", "Weekends", "Teaches guitar on a sunlit balcony.",
                 List.of("Guitar", "Yoga", "Hindi"), List.of("Photography", "Lightroom"), true);
-        User kabir = register("Kabir Singh", "kabir@skillswap.local", "kabir123",
+        User kabir = register("Kabir Singh", "kabir@skillswap.local", "kabir12345",
                 "Delhi", "", "Evenings", "Turns messy spreadsheets into calm ones.",
                 List.of("Excel", "Accounting", "Public Speaking"), List.of("Photoshop", "Yoga"), true);
-        User nora = register("Nora D'Souza", "nora@skillswap.local", "nora123",
+        User nora = register("Nora D'Souza", "nora@skillswap.local", "nora12345",
                 "Bengaluru", "", "Flexible", "Shoots portraits of street musicians.",
                 List.of("Photography", "Lightroom", "Cooking"), List.of("Yoga", "Java"), true);
-        register("Private Patil", "patil@skillswap.local", "patil123",
+        register("Private Patil", "patil@skillswap.local", "patil12345",
                 "Goa", "", "Mornings", "Keeps a low profile while learning pottery.",
                 List.of("Pottery"), List.of("Cooking"), false);
 
